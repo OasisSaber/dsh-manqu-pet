@@ -17,6 +17,8 @@ export const STATES = [
   { id: 'failed', row: 5, defaultFrames: 8, durations: [140, 140, 140, 140, 140, 140, 140, 240] },
   { id: 'waiting', row: 6, defaultFrames: 6, durations: [150, 150, 150, 150, 150, 260] },
   { id: 'running', row: 7, defaultFrames: 6, durations: [120, 120, 120, 120, 120, 220] },
+  // review 是 v2 图集契约行（官方 STATES 表保留），本插件没有对应情绪/触发入口，
+  // 保留以对齐图集行号（row 8），避免帧检测与未来映射错位。
   { id: 'review', row: 8, defaultFrames: 6, durations: [150, 150, 150, 150, 150, 280] },
   { id: 'look-a', row: 9, defaultFrames: 8, v2: true },
   { id: 'look-b', row: 10, defaultFrames: 8, v2: true },
@@ -25,12 +27,6 @@ export const STATES = [
 export function stateById(id) {
   return STATES.find((s) => s.id === id) || STATES[0]
 }
-
-/** 16 方向标签（22.5° 步进，0 = 正上，顺时针）。 */
-export const DIRECTION_LABELS = [
-  '000', '022.5', '045', '067.5', '090', '112.5', '135', '157.5',
-  '180', '202.5', '225', '247.5', '270', '292.5', '315', '337.5',
-]
 
 /** 像素级检测：该格是否有可见像素（步进 4px 采样，alpha > 8 即认为有内容）。 */
 export function cellHasVisiblePixels(pixels, imageWidth, row, col) {

@@ -15,7 +15,7 @@
 | 等待批准 | 期待等待（`waiting`） |
 | 回合 / 任务完成 | 跳跃庆祝（`jumping`） |
 | 任务失败 | 失落（`failed`） |
-| 鼠标靠近 | 视线跟随（`look-a`/`look-b`，16 方向） |
+| 鼠标靠近（仅待机时） | 视线跟随（`look-a`/`look-b`，16 方向） |
 | 点击 / 右键菜单打招呼 | 挥手（`waving`） |
 | 双击 / 菜单跳一下 | 跳跃（`jumping`） |
 | 拖拽 | 一拱一拱地蠕动（`running-left`/`running-right` 快放） |
@@ -30,7 +30,7 @@
 dsh plugin --profile web add "github:OasisSaber/dsh-manqu-pet"
 
 # 方式二：本地开发安装
-dsh plugin --profile web add "D:\Project\GitProject\dsh-manqu-pet"
+dsh plugin --profile web add "<仓库绝对路径>"
 ```
 
 装完**重启 web**（bundle 层在启动时合成），右下角出现满区：点击打招呼、双击跳跃、拖拽移动（拖动时蠕动）、鼠标靠近视线跟随、右键菜单（打招呼/跳一下/隐藏）。位置与隐藏状态保存在 localStorage（`dsh-manqu-pet:*`）。
@@ -59,7 +59,7 @@ node --test tests/*.test.mjs          # 纯逻辑单测
     atlas.mjs        # CodexPet v2 图集纯逻辑（状态表/帧检测/方向）
   src/
     routes.mjs       # 路由前缀单一来源
-    state.mjs        # 情绪 → 状态纯函数
+    state.mjs        # 情绪 → 基础状态纯函数（5 态；look/挥手/蠕动/散步由 client 本地覆盖）
     session-events.mjs  # turn 边沿解析
     assets.mjs       # assets 路径净化 + MIME
   assets/

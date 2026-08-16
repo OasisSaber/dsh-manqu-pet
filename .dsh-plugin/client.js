@@ -42,6 +42,8 @@ var STATES = [
   { id: "failed", row: 5, defaultFrames: 8, durations: [140, 140, 140, 140, 140, 140, 140, 240] },
   { id: "waiting", row: 6, defaultFrames: 6, durations: [150, 150, 150, 150, 150, 260] },
   { id: "running", row: 7, defaultFrames: 6, durations: [120, 120, 120, 120, 120, 220] },
+  // review 是 v2 图集契约行（官方 STATES 表保留），本插件没有对应情绪/触发入口，
+  // 保留以对齐图集行号（row 8），避免帧检测与未来映射错位。
   { id: "review", row: 8, defaultFrames: 6, durations: [150, 150, 150, 150, 150, 280] },
   { id: "look-a", row: 9, defaultFrames: 8, v2: true },
   { id: "look-b", row: 10, defaultFrames: 8, v2: true }
@@ -85,6 +87,15 @@ function directionFor(dx, dy) {
   const norm = (degrees % 360 + 360) % 360;
   const index = Math.round(norm / 22.5) % 16;
   return { index, row: index < 8 ? 9 : 10, frame: index % 8 };
+}
+
+// .dsh-plugin/src/state.mjs
+function pickBaseState(mood, now = Date.now()) {
+  if (mood.failedUntil > now) return "failed";
+  if (mood.celebrateUntil > now) return "jumping";
+  if (mood.waiting === true) return "waiting";
+  if (mood.thinking === true) return "running";
+  return "idle";
 }
 
 // .dsh-plugin/src/routes.mjs
@@ -298,13 +309,6 @@ function apply(ctx = {}) {
   let frameAt = 0;
   let playbackId = null;
   let lastPaint = 0;
-  const baseStateId = (now) => {
-    if (mood.failedUntil > now) return "failed";
-    if (mood.celebrateUntil > now) return "jumping";
-    if (mood.waiting) return "waiting";
-    if (mood.thinking) return "running";
-    return "idle";
-  };
   const resolvePlayback = (now) => {
     if (!assetsReady || pet === null) return null;
     if (dragging) {
@@ -324,7 +328,7 @@ function apply(ctx = {}) {
       const once = true;
       return { id: transient.id, row: st2.row, frames: frames2, once, hold: false };
     }
-    let base = baseStateId(now);
+    let base = pickBaseState(mood, now);
     if (base === "idle" && wander !== null && wander.until > now && y === null) {
       const id = wander.dir >= 0 ? "running-right" : "running-left";
       const st2 = stateById(id);
@@ -388,7 +392,7 @@ function apply(ctx = {}) {
         scheduleWander();
         return;
       }
-      const base = baseStateId(Date.now());
+      const base = pickBaseState(mood, Date.now());
       if (base !== "idle" || y !== null) {
         scheduleWander();
         return;
@@ -456,7 +460,7 @@ function apply(ctx = {}) {
     const dxp = e.clientX - cx;
     const dyp = e.clientY - cy;
     const dist = Math.hypot(dxp, dyp);
-    const base = baseStateId(Date.now());
+    const base = pickBaseState(mood, Date.now());
     if (dist < LOOK_DEADZONE || dist > LOOK_RADIUS || base !== "idle" || wander !== null) {
       look = null;
       return;

@@ -1,10 +1,9 @@
-// 情绪 → CodexPet 状态 的纯函数映射（无 DOM、无宿主依赖，可单测）。
-// mood 由 Node half 聚合（thinking/waiting/celebrateUntil/failedUntil/welcomeUntil），
-// 本地交互（拖拽/视线/瞬发）由 client 在更高优先级覆盖。
+// 情绪 → CodexPet 基础状态 的纯函数映射（无 DOM、无宿主依赖，可单测）。
+// mood 由 Node half 聚合（thinking/waiting/celebrateUntil/failedUntil），
+// 只覆盖 5 个基础态；look/挥手/蠕动/散步等本地交互态由 client 以更高优先级覆盖。
 
 export const CELEBRATE_MS = 4000
 export const FAILED_MS = 5000
-export const WELCOME_MS = 4000
 
 /**
  * 基础状态选择（不含本地交互覆盖）。

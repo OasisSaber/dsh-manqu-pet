@@ -11,6 +11,7 @@
 // 状态选择：本地交互（拖拽 > 视线 > 瞬发）覆盖基础情绪状态（失败 > 庆祝 > 等待 > 思考 > 待机）。
 
 import { CELL_WIDTH, CELL_HEIGHT, COLUMNS, stateById, frameIndexesFor, durationFor, directionFor, detectPopulatedFrames } from './atlas.mjs'
+import { pickBaseState } from '../src/state.mjs'
 import { STATE_PATH, ASSETS_PATH, EVENTS_PATH } from '../src/routes.mjs'
 
 const ASSETS_URL = ASSETS_PATH
@@ -223,13 +224,7 @@ export function apply(ctx = {}) {
   let playbackId = null // 当前播放标识（每次换状态重置帧位置）
   let lastPaint = 0
 
-  const baseStateId = (now) => {
-    if (mood.failedUntil > now) return 'failed'
-    if (mood.celebrateUntil > now) return 'jumping'
-    if (mood.waiting) return 'waiting'
-    if (mood.thinking) return 'running'
-    return 'idle'
-  }
+  // 基础情绪态（失败 > 庆祝 > 等待 > 思考 > 待机）由 src/state.mjs pickBaseState 单一来源提供。
 
   // 解析当前播放目标（返回 { id, row, frames, once }；null = 不播）。
   const resolvePlayback = (now) => {
@@ -251,7 +246,7 @@ export function apply(ctx = {}) {
       const once = true
       return { id: transient.id, row: st.row, frames, once, hold: false }
     }
-    let base = baseStateId(now)
+    let base = pickBaseState(mood, now)
     // 散步：仅基础态为 idle 且贴底时
     if (base === 'idle' && wander !== null && wander.until > now && y === null) {
       const id = wander.dir >= 0 ? 'running-right' : 'running-left'
@@ -320,7 +315,7 @@ export function apply(ctx = {}) {
     const wait = WANDER_MIN_WAIT + Math.random() * (WANDER_MAX_WAIT - WANDER_MIN_WAIT)
     wanderTimer = setTimeout(() => {
       if (dragging || transient !== null || look !== null) { scheduleWander(); return }
-      const base = baseStateId(Date.now())
+      const base = pickBaseState(mood, Date.now())
       if (base !== 'idle' || y !== null) { scheduleWander(); return }
       const dir = Math.random() < 0.5 ? -1 : 1
       const dur = 2500 + Math.random() * 2500
@@ -381,7 +376,7 @@ export function apply(ctx = {}) {
     const dxp = e.clientX - cx
     const dyp = e.clientY - cy
     const dist = Math.hypot(dxp, dyp)
-    const base = baseStateId(Date.now())
+    const base = pickBaseState(mood, Date.now())
     if (dist < LOOK_DEADZONE || dist > LOOK_RADIUS || base !== 'idle' || wander !== null) {
       look = null
       return
