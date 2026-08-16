@@ -1,0 +1,19 @@
+# 行尾策略：所有文本文件统一 LF（检出与提交一致），覆盖 Windows core.autocrlf。
+# 背景：autocrlf=true 的 Windows 工作树会把文本检出为 CRLF，导致
+# scripts/build-client.mjs --check 对生成物 client.js 的逐字节比对误报不一致。
+* text=auto
+*.mjs   text eol=lf
+*.js    text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.sh    text eol=lf
+*.ps1   text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+LICENSE text eol=lf
+
+# 二进制：显式声明，防文本化处理（换行/编码转换）。
+*.webp binary
+*.png   binary
