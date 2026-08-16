@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "OasisSaber/TheMasterplan",
+    "version": "v4.0.0",
+    "commit": "8895a0082358a569012e6be1d490aa91c37a699c"
+  },
+  "selection": {
+    "profile": "git",
+    "adapter": "generic",
+    "validation_path": "scripts/check.sh",
+    "default_branch": "main"
+  },
+  "managed_files": {
+    "core/workflow.md": {
+      "source": "core/workflow.md",
+      "source_sha256": "0aa1f2944a44f6cad78fc8a95745d2b0ca10fd202b1b71aa65b731aacc9dd033",
+      "installed_sha256": "0aa1f2944a44f6cad78fc8a95745d2b0ca10fd202b1b71aa65b731aacc9dd033",
+      "ownership": "managed-replace"
+    },
+    "core/policy.md": {
+      "source": "core/policy.md",
+      "source_sha256": "58e5084a6c86981644a624c7564427daf2264dc4541f950415ed2f5f16b76ced",
+      "installed_sha256": "58e5084a6c86981644a624c7564427daf2264dc4541f950415ed2f5f16b76ced",
+      "ownership": "managed-replace"
+    },
+    "profiles/git.md": {
+      "source": "profiles/git.md",
+      "source_sha256": "ceaeba165f58d0c093658fc2963d73edd9ef46c187e82f416dbcdcf5ef18a508",
+      "installed_sha256": "ceaeba165f58d0c093658fc2963d73edd9ef46c187e82f416dbcdcf5ef18a508",
+      "ownership": "managed-replace"
+    },
+    "adapters/generic.md": {
+      "source": "adapters/generic.md",
+      "source_sha256": "ecdb63ed0d71af6914e7a38ac5a90c667fef87942edf0861bb06f64db7bfc499",
+      "installed_sha256": "ecdb63ed0d71af6914e7a38ac5a90c667fef87942edf0861bb06f64db7bfc499",
+      "ownership": "managed-replace"
+    }
+  },
+  "adoption": {
+    "date": "2026-08-16",
+    "platform": "Windows",
+    "git_version": "2.54.0.windows.1",
+    "jj_version": null,
+    "status": "VERIFIED"
+  }
+}

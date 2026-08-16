@@ -1,0 +1,35 @@
+{
+  "name": "dsh-manqu-pet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH Web GUI 桌面宠物：灰泽满的 CodexPet「满区 Manqu」原版移植（CodexPet v2 图集：待机眨眼/拖动蠕动/跟随视线）",
+  "scripts": {
+    "build:client": "node scripts/build-client.mjs",
+    "check:client": "node scripts/build-client.mjs --check",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "main": "./.dsh-plugin/index.mjs",
+  "exports": {
+    ".": "./.dsh-plugin/index.mjs",
+    "./client": "./.dsh-plugin/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "files": [
+    "cordis.patch.yml",
+    ".dsh-plugin"
+  ],
+  "license": "MIT"
+}

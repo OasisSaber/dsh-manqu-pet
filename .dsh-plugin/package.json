@@ -1,0 +1,14 @@
+{
+  "name": "dsh-manqu-pet",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "index.mjs",
+    "src",
+    "client",
+    "client.js",
+    "assets"
+  ],
+  "license": "MIT"
+}

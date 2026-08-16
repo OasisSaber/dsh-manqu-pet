@@ -1,0 +1,6 @@
+# dsh-manqu-pet bundle patch：向 web 组合挂载 dsh-manqu-pet。
+# Node half 提供 /manqu/assets 静态资源 + /manqu/state 会话情绪聚合；
+# client half（.dsh-plugin/client.js，__ModuleLoader__ 形态）渲染 CodexPet v2 图集宠物。
+- insert:
+    - id: dsh-manqu-pet
+      name: dsh-manqu-pet
