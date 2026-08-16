@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { STATE_PATH, ASSETS_PATH, EVENTS_PATH } from './src/routes.mjs'
 import { sanitizeAssetPath, contentTypeFor } from './src/assets.mjs'
-import { parseTurnEvent } from './src/session-events.mjs'
+import { parseTurnEvent, parseApprovalEvent } from './src/session-events.mjs'
 import { CELEBRATE_MS, FAILED_MS } from './src/state.mjs'
 
 export const name = 'dsh-manqu-pet'
@@ -34,6 +34,15 @@ export function apply(ctx) {
     }
   }
 
+  /** 单快照过滤：已见去重 + running/pending 过滤 + label 提取。 */
+  const pushRunning = (out, seen, snapshot) => {
+    if (seen.has(snapshot.id)) return
+    seen.add(snapshot.id)
+    if (snapshot.status === 'running' || snapshot.status === 'pending') {
+      out.push(typeof snapshot.label === 'string' ? snapshot.label : snapshot.id)
+    }
+  }
+
   /** 从宿主 jobs 服务收集运行中任务标题（跨 agent + unowned，按 id 去重）。 */
   const collectRunningJobs = (ctxRef) => {
     const jobs = ctxRef.jobs
@@ -42,21 +51,9 @@ export function apply(ctx) {
     if (jobs === undefined || typeof jobs.list !== 'function') return out
     try {
       for (const agent of (typeof ctxRef.agents?.list === 'function' ? ctxRef.agents.list() : [])) {
-        for (const snapshot of jobs.list(agent)) {
-          if (seen.has(snapshot.id)) continue
-          seen.add(snapshot.id)
-          if (snapshot.status === 'running' || snapshot.status === 'pending') {
-            out.push(typeof snapshot.label === 'string' ? snapshot.label : snapshot.id)
-          }
-        }
+        for (const snapshot of jobs.list(agent)) pushRunning(out, seen, snapshot)
       }
-      for (const snapshot of jobs.list()) {
-        if (seen.has(snapshot.id)) continue
-        seen.add(snapshot.id)
-        if (snapshot.status === 'running' || snapshot.status === 'pending') {
-          out.push(typeof snapshot.label === 'string' ? snapshot.label : snapshot.id)
-        }
-      }
+      for (const snapshot of jobs.list()) pushRunning(out, seen, snapshot)
     } catch {
       // 聚合异常：保留上次值
     }
@@ -80,10 +77,19 @@ export function apply(ctx) {
     }
 
     // 会话 turn 边沿：驱动 thinking / waiting / 回合完成庆祝。
+    // 审批等待以 approval/asked → approval/decided 为主路径（宿主在等待批准时
+    // turn 保持开启、不发 turn/end）；turn/end blocked 仅作兜底触发面。
     if (typeof ctx.on === 'function') {
       disposers.push(ctx.on('session/event', (session, event) => {
         const id = typeof session?.id === 'string' ? session.id : null
         if (id === null) return
+        const approval = parseApprovalEvent(event)
+        if (approval !== null) {
+          if (approval.kind === 'asked') waiting = true
+          else waiting = false
+          broadcast()
+          return
+        }
         const parsed = parseTurnEvent(event)
         if (parsed === null) return
         if (parsed.kind === 'start') {
