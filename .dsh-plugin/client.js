@@ -132,10 +132,12 @@ function directionFor(dx, dy) {
 }
 
 // .dsh-plugin/src/state.mjs
+var READY_MS = 10 * 60 * 1e3;
 function pickBaseState(mood, now = Date.now()) {
   if (mood.failedUntil > now) return "failed";
   if (mood.celebrateUntil > now) return "jumping";
   if (mood.waiting === true) return "waiting";
+  if (mood.readyUntil > now) return "review";
   if (mood.thinking === true) return "running";
   return "idle";
 }
@@ -149,6 +151,8 @@ var EVENTS_PATH = `${ROUTE_PREFIX}/events`;
 // .dsh-plugin/client/index.mjs
 var ASSETS_URL = ASSETS_PATH;
 var PET_HEIGHT = 150;
+var DPR = Math.min(window.devicePixelRatio || 1, 3);
+var REDUCED_MOTION = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 var LOOK_RADIUS = 520;
 var LOOK_DEADZONE = 36;
 var POLL_MS = 2e3;
@@ -221,8 +225,8 @@ function apply(ctx = {}) {
   document.body.appendChild(host);
   const canvas = document.createElement("canvas");
   canvas.className = "pet-canvas";
-  canvas.width = CELL_WIDTH;
-  canvas.height = CELL_HEIGHT;
+  canvas.width = CELL_WIDTH * DPR;
+  canvas.height = CELL_HEIGHT * DPR;
   const hitarea = document.createElement("div");
   hitarea.className = "pet-hitarea";
   hitarea.setAttribute("role", "button");
@@ -295,7 +299,9 @@ function apply(ctx = {}) {
       console.warn("[dsh-manqu-pet] \u8D44\u4EA7\u52A0\u8F7D\u5931\u8D25\uFF1A", error);
     }
   };
-  let mood = { thinking: false, waiting: false, celebrateUntil: 0, failedUntil: 0, titles: [] };
+  let mood = { thinking: false, waiting: false, celebrateUntil: 0, failedUntil: 0, readyUntil: 0, titles: [] };
+  let seenReadyUntil = 0;
+  let readyUnread = false;
   let refreshTimer = null;
   let refreshBusy = false;
   let eventSource = null;
@@ -320,8 +326,13 @@ function apply(ctx = {}) {
           waiting: m.waiting === true,
           celebrateUntil: typeof m.celebrateUntil === "number" ? m.celebrateUntil : 0,
           failedUntil: typeof m.failedUntil === "number" ? m.failedUntil : 0,
+          readyUntil: typeof m.readyUntil === "number" ? m.readyUntil : 0,
           titles: Array.isArray(m.titles) ? m.titles : []
         };
+        if (mood.readyUntil > seenReadyUntil) {
+          seenReadyUntil = mood.readyUntil;
+          readyUnread = true;
+        }
         if (m.thinking === true && m.waiting !== true && m.celebrateUntil <= Date.now() && m.failedUntil <= Date.now()) {
           if (mood.titles.length) {
             statusTitle.textContent = mood.titles[0];
@@ -340,17 +351,15 @@ function apply(ctx = {}) {
       refreshBusy = false;
     }
   };
-  const speedFactor = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0.5 : 1;
   let dragging = false;
   let dragDir = 1;
   let look = null;
   let transient = null;
   let wander = null;
-  let prevBase = "idle";
   let framePos = 0;
   let frameAt = 0;
   let playbackId = null;
-  let lastPaint = 0;
+  const baseMood = () => readyUnread ? mood : { ...mood, readyUntil: 0 };
   const resolvePlayback = (now) => {
     if (!assetsReady || pet === null) return null;
     if (dragging) {
@@ -370,7 +379,7 @@ function apply(ctx = {}) {
       const once = true;
       return { id: transient.id, row: st2.row, frames: frames2, once, hold: false };
     }
-    let base = pickBaseState(mood, now);
+    let base = pickBaseState(baseMood(), now);
     if (base === "idle" && wander !== null && wander.until > now && y === null) {
       const id = wander.dir >= 0 ? "running-right" : "running-left";
       const st2 = stateById(id);
@@ -384,25 +393,32 @@ function apply(ctx = {}) {
     return { id: base, row: st.row, frames, once: false, hold: false };
   };
   const ctx2d = canvas.getContext("2d");
+  ctx2d.setTransform(DPR, 0, 0, DPR, 0, 0);
   const drawFrame = (row, frame) => {
     if (!assetsReady || pet === null) return;
     ctx2d.clearRect(0, 0, CELL_WIDTH, CELL_HEIGHT);
     ctx2d.drawImage(pet.image, frame * CELL_WIDTH, row * CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT, 0, 0, CELL_WIDTH, CELL_HEIGHT);
   };
-  const stateLabel = (id) => ({ idle: "\u5F85\u673A", running: "\u5DE5\u4F5C\u4E2D", waiting: "\u7B49\u4F60\u6279\u51C6", jumping: "\u5E86\u795D", failed: "\u5931\u843D", waving: "\u6253\u62DB\u547C", "running-right": "\u5411\u53F3\u8815\u52A8", "running-left": "\u5411\u5DE6\u8815\u52A8", look: "\u770B\u7740\u4F60" })[id] || id;
+  const stateLabel = (id) => ({ idle: "\u5F85\u673A", running: "\u5DE5\u4F5C\u4E2D", waiting: "\u7B49\u4F60\u6279\u51C6", jumping: "\u5E86\u795D", failed: "\u5931\u843D", review: "\u6709\u672A\u8BFB\u6D3B\u52A8", waving: "\u6253\u62DB\u547C", "running-right": "\u5411\u53F3\u8815\u52A8", "running-left": "\u5411\u5DE6\u8815\u52A8", look: "\u770B\u7740\u4F60" })[id] || id;
   const tick = (ts) => {
     requestAnimationFrame(tick);
     const now = Date.now();
-    if (transient !== null && transient.held && now > transient.at + TRANSIENT_HOLD_MS) transient = null;
+    if (transient !== null && (REDUCED_MOTION || transient.held && now > transient.at + TRANSIENT_HOLD_MS)) transient = null;
     const pb = resolvePlayback(now);
     if (pb === null) return;
+    const label = pb.id === "look" ? look !== null ? "\u770B\u7740\u4F60" : "\u5F85\u673A" : stateLabel(pb.id);
+    if (statusState.textContent !== label) statusState.textContent = label;
+    if (REDUCED_MOTION) {
+      drawFrame(pb.row, pb.frames[0]);
+      return;
+    }
     if (playbackId !== pb.id + ":" + pb.row + ":" + pb.frames.join(",")) {
       playbackId = pb.id + ":" + pb.row + ":" + pb.frames.join(",");
       framePos = 0;
       frameAt = ts;
     }
     const elapsed = ts - frameAt;
-    const duration = durationFor(stateById(pb.id === "look" ? "idle" : pb.id), framePos) / speedFactor;
+    const duration = durationFor(stateById(pb.id === "look" ? "idle" : pb.id), framePos);
     let frame = pb.frames[framePos];
     if (elapsed >= duration) {
       frameAt = ts;
@@ -420,9 +436,6 @@ function apply(ctx = {}) {
       }
     }
     drawFrame(pb.row, frame);
-    const label = pb.id === "look" ? look !== null ? "\u770B\u7740\u4F60" : "\u5F85\u673A" : stateLabel(pb.id);
-    if (statusState.textContent !== label) statusState.textContent = label;
-    lastPaint = ts;
   };
   let wanderTimer = null;
   const scheduleWander = () => {
@@ -434,15 +447,14 @@ function apply(ctx = {}) {
         scheduleWander();
         return;
       }
-      const base = pickBaseState(mood, Date.now());
+      const base = pickBaseState(baseMood(), Date.now());
       if (base !== "idle" || y !== null) {
         scheduleWander();
         return;
       }
       const dir = Math.random() < 0.5 ? -1 : 1;
       const dur = 2500 + Math.random() * 2500;
-      wander = { dir, until: Date.now() + dur, from: x };
-      wanderUntil = wander.until;
+      wander = { dir, until: Date.now() + dur };
       const step = () => {
         if (wander === null) return;
         if (Date.now() >= wander.until || dragging || look !== null) {
@@ -460,7 +472,6 @@ function apply(ctx = {}) {
     }, wait);
   };
   let wanderStepTimer = null;
-  let wanderUntil = 0;
   let press = null;
   const onPointerDown = (e) => {
     if (e.button !== void 0 && e.button !== 0) return;
@@ -502,7 +513,7 @@ function apply(ctx = {}) {
     const dxp = e.clientX - cx;
     const dyp = e.clientY - cy;
     const dist = Math.hypot(dxp, dyp);
-    const base = pickBaseState(mood, Date.now());
+    const base = pickBaseState(baseMood(), Date.now());
     if (dist < LOOK_DEADZONE || dist > LOOK_RADIUS || base !== "idle" || wander !== null) {
       look = null;
       return;
@@ -523,6 +534,7 @@ function apply(ctx = {}) {
       STORE.set("dsh-manqu-pet:y", y);
       return;
     }
+    readyUnread = false;
     const now = Date.now();
     if (moved) return;
     if (now - startT > 500) return;
@@ -594,8 +606,12 @@ function apply(ctx = {}) {
     if (e.key !== "Enter" && e.key !== " ") return;
     if (document.activeElement !== hitarea) return;
     e.preventDefault();
+    readyUnread = false;
     transient = { id: "waving", at: Date.now(), held: false };
     bubble("\u55E8\uFF5E");
+  };
+  const clearLook = () => {
+    look = null;
   };
   hitarea.addEventListener("pointerdown", onPointerDown);
   hitarea.addEventListener("pointermove", onPointerMove);
@@ -606,12 +622,15 @@ function apply(ctx = {}) {
   document.addEventListener("pointerdown", onDocPointerDown);
   hitarea.addEventListener("contextmenu", onContextMenu);
   hitarea.addEventListener("keydown", onKeyDown);
+  document.documentElement.addEventListener("mouseleave", clearLook);
+  window.addEventListener("blur", clearLook);
   if (STORE.get("dsh-manqu-pet:hidden", false) === true) {
     host.setAttribute("data-hidden", "");
     restore.style.display = "";
   }
   const onResize = () => {
     x = clampX(x);
+    if (y !== null) y = Math.max(4, Math.min(window.innerHeight - host.offsetHeight - 4, y));
     applyPos();
   };
   window.addEventListener("resize", onResize);
@@ -636,6 +655,8 @@ function apply(ctx = {}) {
     document.removeEventListener("pointermove", onPointerMove, true);
     window.removeEventListener("pointerup", onPointerUp);
     document.removeEventListener("pointerdown", onDocPointerDown);
+    document.documentElement.removeEventListener("mouseleave", clearLook);
+    window.removeEventListener("blur", clearLook);
     window.removeEventListener("resize", onResize);
   };
 }
