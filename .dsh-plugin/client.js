@@ -33,60 +33,102 @@ module.exports = __toCommonJS(index_exports);
 var CELL_WIDTH = 192;
 var CELL_HEIGHT = 208;
 var COLUMNS = 8;
-var STATES = [
-  { id: "idle", row: 0, defaultFrames: 6, durations: [280, 110, 110, 140, 140, 320] },
-  { id: "running-right", row: 1, defaultFrames: 8, durations: [120, 120, 120, 120, 120, 120, 120, 220] },
-  { id: "running-left", row: 2, defaultFrames: 8, durations: [120, 120, 120, 120, 120, 120, 120, 220] },
-  { id: "waving", row: 3, defaultFrames: 4, durations: [140, 140, 140, 280] },
-  { id: "jumping", row: 4, defaultFrames: 5, durations: [140, 140, 140, 140, 280] },
-  { id: "failed", row: 5, defaultFrames: 8, durations: [140, 140, 140, 140, 140, 140, 140, 240] },
-  { id: "waiting", row: 6, defaultFrames: 6, durations: [150, 150, 150, 150, 150, 260] },
-  { id: "running", row: 7, defaultFrames: 6, durations: [120, 120, 120, 120, 120, 220] },
-  // review 是 v2 图集契约行（官方 STATES 表保留），本插件没有对应情绪/触发入口，
-  // 保留以对齐图集行号（row 8），避免帧检测与未来映射错位。
-  { id: "review", row: 8, defaultFrames: 6, durations: [150, 150, 150, 150, 150, 280] },
-  { id: "look-a", row: 9, defaultFrames: 8, v2: true },
-  { id: "look-b", row: 10, defaultFrames: 8, v2: true }
+var FALLBACK_DURATION = 140;
+var DIRECTION_COUNT = 16;
+var ANGLE_STEP = Math.PI * 2 / DIRECTION_COUNT;
+var STATE_DEFINITIONS = [
+  ["idle", 0, 6, [280, 110, 110, 140, 140, 320]],
+  ["running-right", 1, 8, [120, 120, 120, 120, 120, 120, 120, 220]],
+  ["running-left", 2, 8, [120, 120, 120, 120, 120, 120, 120, 220]],
+  ["waving", 3, 4, [140, 140, 140, 280]],
+  ["jumping", 4, 5, [140, 140, 140, 140, 280]],
+  ["failed", 5, 8, [140, 140, 140, 140, 140, 140, 140, 240]],
+  ["waiting", 6, 6, [150, 150, 150, 150, 150, 260]],
+  ["running", 7, 6, [120, 120, 120, 120, 120, 220]],
+  ["review", 8, 6, [150, 150, 150, 150, 150, 280]],
+  ["look-a", 9, 8, null],
+  ["look-b", 10, 8, null]
 ];
+var STATES = Object.freeze(
+  STATE_DEFINITIONS.map(([id, row, defaultFrames, durations]) => Object.freeze({
+    id,
+    row,
+    defaultFrames,
+    ...durations ? { durations: Object.freeze(durations) } : { v2: true }
+  }))
+);
+var STATE_BY_ID = new Map(STATES.map((state) => [state.id, state]));
 function stateById(id) {
-  return STATES.find((s) => s.id === id) || STATES[0];
+  return STATE_BY_ID.get(id) ?? STATES[0];
+}
+function validDimension(value) {
+  return Number.isInteger(value) && value > 0;
 }
 function cellHasVisiblePixels(pixels, imageWidth, row, col) {
-  const startX = col * CELL_WIDTH;
-  const startY = row * CELL_HEIGHT;
-  for (let y = startY; y < startY + CELL_HEIGHT; y += 4) {
-    for (let x = startX; x < startX + CELL_WIDTH; x += 4) {
-      if (pixels[(y * imageWidth + x) * 4 + 3] > 8) return true;
+  if (!pixels || !validDimension(imageWidth) || !Number.isInteger(row) || row < 0 || !Number.isInteger(col) || col < 0) {
+    return false;
+  }
+  const stride = imageWidth * 4;
+  const imageHeight = Math.floor(pixels.length / stride);
+  const left = col * CELL_WIDTH;
+  const top = row * CELL_HEIGHT;
+  const right = Math.min(left + CELL_WIDTH, imageWidth);
+  const bottom = Math.min(top + CELL_HEIGHT, imageHeight);
+  if (left >= right || top >= bottom) return false;
+  for (let y = top; y < bottom; y += 4) {
+    for (let x = left; x < right; x += 4) {
+      const alphaOffset = y * stride + x * 4 + 3;
+      if ((pixels[alphaOffset] ?? 0) > 8) return true;
     }
   }
   return false;
 }
 function detectPopulatedFrames(pixels, imageWidth, rows, cols = COLUMNS) {
-  const populated = [];
-  for (let row = 0; row < rows; row += 1) {
-    const frameIndexes = [];
-    for (let col = 0; col < Math.min(cols, COLUMNS); col += 1) {
-      if (cellHasVisiblePixels(pixels, imageWidth, row, col)) frameIndexes.push(col);
+  const rowCount = Number.isInteger(rows) && rows > 0 ? rows : 0;
+  const colCount = Number.isInteger(cols) && cols > 0 ? Math.min(cols, COLUMNS) : 0;
+  return Array.from({ length: rowCount }, (_, row) => {
+    const frames = [];
+    for (let col = 0; col < colCount; col += 1) {
+      if (cellHasVisiblePixels(pixels, imageWidth, row, col)) frames.push(col);
     }
-    populated.push(frameIndexes);
-  }
-  return populated;
+    return frames;
+  });
+}
+function availableColumns(pet) {
+  return Number.isInteger(pet?.cols) && pet.cols > 0 ? Math.min(pet.cols, COLUMNS) : 0;
 }
 function frameIndexesFor(state, pet) {
-  if (state.row >= pet.rows) return [];
+  if (!state || !pet || !Number.isInteger(pet.rows) || state.row < 0 || state.row >= pet.rows) return [];
+  const maxColumns = availableColumns(pet);
   const detected = pet.populatedByRow?.[state.row];
-  if (Array.isArray(detected) && detected.length > 0) return detected;
-  return Array.from({ length: Math.min(state.defaultFrames, pet.cols, COLUMNS) }, (_, i) => i);
+  if (Array.isArray(detected) && detected.length > 0) {
+    const seen = /* @__PURE__ */ new Set();
+    return detected.filter((frame) => {
+      if (!Number.isInteger(frame) || frame < 0 || frame >= maxColumns || seen.has(frame)) return false;
+      seen.add(frame);
+      return true;
+    });
+  }
+  const fallbackCount = Math.max(0, Math.min(state.defaultFrames ?? 0, maxColumns));
+  return Array.from({ length: fallbackCount }, (_, index) => index);
 }
 function durationFor(state, position) {
-  if (!state.durations?.length) return 140;
-  return state.durations[Math.min(position, state.durations.length - 1)];
+  if (!Array.isArray(state?.durations) || state.durations.length === 0) return FALLBACK_DURATION;
+  const safePosition = Number.isFinite(position) ? Math.max(0, Math.floor(position)) : 0;
+  return state.durations[Math.min(safePosition, state.durations.length - 1)] ?? FALLBACK_DURATION;
+}
+function defaultDirection() {
+  return { index: 0, row: 9, frame: 0 };
 }
 function directionFor(dx, dy) {
-  const degrees = Math.atan2(dy, dx) * 180 / Math.PI + 90;
-  const norm = (degrees % 360 + 360) % 360;
-  const index = Math.round(norm / 22.5) % 16;
-  return { index, row: index < 8 ? 9 : 10, frame: index % 8 };
+  if (!Number.isFinite(dx) || !Number.isFinite(dy) || dx === 0 && dy === 0) return defaultDirection();
+  const angle = Math.atan2(dx, -dy);
+  const index = (Math.round(angle / ANGLE_STEP) % DIRECTION_COUNT + DIRECTION_COUNT) % DIRECTION_COUNT;
+  return {
+    index,
+    row: index < COLUMNS ? 9 : 10,
+    frame: index % COLUMNS
+  };
 }
 
 // .dsh-plugin/src/state.mjs

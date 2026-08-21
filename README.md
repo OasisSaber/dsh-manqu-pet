@@ -72,8 +72,14 @@ cordis.patch.yml     # bundle 挂载补丁
 
 - 角色：**灰泽满**（Bilibili UP 主）的粉丝宠物 **Manqu**（满区）
 - 格式：CodexPet v2（OpenAI Codex 桌面宠物格式）
-- 参考实现：[noir-hedgehog/PetViewer](https://github.com/noir-hedgehog/PetViewer)、[vlln/whale-girl](https://github.com/vlln/whale-girl)（DSH bundle 插件范本）
+- DSH bundle 插件范本：[vlln/whale-girl](https://github.com/vlln/whale-girl)
+
+Manqu 相关图像与 manifest 素材的来源记录见 [`ASSET-NOTICE.md`](./ASSET-NOTICE.md)。
+本仓库的 atlas 播放逻辑是独立实现，不把 PetViewer 的具体代码作为本项目代码来源。
 
 ## License
 
-- **代码**：MIT（见 `LICENSE`）。
+- **源代码**：MIT（见 [`LICENSE`](./LICENSE)）。该许可仅适用于本项目自行编写的源代码。
+- **Manqu 素材**：第三方/粉丝向素材，不自动包含在 MIT 许可中；请先阅读
+  [`ASSET-NOTICE.md`](./ASSET-NOTICE.md)。
+- 本项目与灰泽满、相关创作者或 OpenAI 不构成官方关联、授权背书或赞助关系。

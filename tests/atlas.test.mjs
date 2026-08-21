@@ -26,6 +26,11 @@ test('frameIndexesFor：像素检测优先，缺检测用 defaultFrames 截断',
   assert.deepEqual(frameIndexesFor(stateById('look-a'), small), [])
 })
 
+test('frameIndexesFor：检测结果只保留图集内的唯一帧', () => {
+  const pet = { rows: 11, cols: 4, populatedByRow: [[3, 3, 7, -1, 1], null, null, null, null, null, null, null, null, null, null] }
+  assert.deepEqual(frameIndexesFor(stateById('idle'), pet), [3, 1])
+})
+
 test('directionFor：16 方向映射到 look 行/帧', () => {
   const up = directionFor(0, -100)
   assert.equal(up.index, 0); assert.equal(up.row, 9); assert.equal(up.frame, 0)
@@ -37,10 +42,16 @@ test('directionFor：16 方向映射到 look 行/帧', () => {
   assert.equal(left.index, 12); assert.equal(left.row, 10); assert.equal(left.frame, 4)
 })
 
+test('directionFor：零向量或非有限输入退回向上方向', () => {
+  assert.deepEqual(directionFor(0, 0), { index: 0, row: 9, frame: 0 })
+  assert.deepEqual(directionFor(Number.NaN, 10), { index: 0, row: 9, frame: 0 })
+})
+
 test('durationFor：逐帧时长与兜底', () => {
   assert.equal(durationFor(stateById('idle'), 0), 280)
   assert.equal(durationFor(stateById('idle'), 5), 320)
   assert.equal(durationFor(stateById('look-a'), 3), 140)
+  assert.equal(durationFor(stateById('idle'), -1), 280)
 })
 
 test('detectPopulatedFrames：空帧剔除', () => {

@@ -29,7 +29,8 @@
   },
   "files": [
     "cordis.patch.yml",
-    ".dsh-plugin"
+    ".dsh-plugin",
+    "ASSET-NOTICE.md"
   ],
   "license": "MIT"
 }
