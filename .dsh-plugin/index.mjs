@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { STATE_PATH, ASSETS_PATH, EVENTS_PATH } from './src/routes.mjs'
 import { sanitizeAssetPath, contentTypeFor } from './src/assets.mjs'
 import { parseTurnEvent, parseApprovalEvent } from './src/session-events.mjs'
-import { CELEBRATE_MS, FAILED_MS } from './src/state.mjs'
+import { CELEBRATE_MS, FAILED_MS, READY_MS } from './src/state.mjs'
 
 export const name = 'dsh-manqu-pet'
 export const inject = ['jobs', 'agents', 'sessions', 'webServer']
@@ -23,6 +23,7 @@ export function apply(ctx) {
   let waiting = false
   let celebrateUntil = 0
   let failedUntil = 0
+  let readyUntil = 0 // Ready（完成但有未读活动）：庆祝窗口结束后由 review 行接管，直至 client 单击已读或过期
   const titles = []
   const activeTurns = new Map() // sessionId → 未结束 turn 数
   const sseClients = new Set()
@@ -69,6 +70,7 @@ export function apply(ctx) {
         const now = Date.now()
         if (snapshot.status === 'completed') {
           celebrateUntil = Math.max(celebrateUntil, now + CELEBRATE_MS)
+          readyUntil = Math.max(readyUntil, now + READY_MS)
         } else if (snapshot.status === 'failed') {
           failedUntil = Math.max(failedUntil, now + FAILED_MS)
         }
@@ -105,6 +107,7 @@ export function apply(ctx) {
           } else {
             waiting = false
             celebrateUntil = Math.max(celebrateUntil, Date.now() + CELEBRATE_MS)
+            readyUntil = Math.max(readyUntil, Date.now() + READY_MS)
           }
         }
         broadcast()
@@ -153,6 +156,7 @@ export function apply(ctx) {
                 waiting,
                 celebrateUntil,
                 failedUntil,
+                readyUntil,
                 titles: titles.slice(0, 4),
               },
               ts: Date.now(),
