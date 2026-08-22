@@ -176,9 +176,18 @@ var CSS = `
 [data-dsh-manqu-pet] .pet-status .st { color: #B7C8FE; font-weight: 600; }
 [data-dsh-manqu-pet] .pet-status .tt { color: #9aa3b2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
 [data-dsh-manqu-pet] .pet-menu { position: absolute; left: 50%; top: calc(100% + 10px); transform: translateX(-50%);
-  display: none; gap: 6px; padding: 6px; border-radius: 10px; z-index: 4;
+  display: none; flex-direction: column; align-items: stretch; gap: 6px; min-width: 190px; max-width: 280px; padding: 6px; border-radius: 10px; z-index: 4;
   background: rgba(24,28,38,.96); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 12px 32px rgba(0,0,0,.4); }
 [data-dsh-manqu-pet] .pet-menu.open { display: flex; }
+[data-dsh-manqu-pet] .pet-menu-actions { display: flex; gap: 6px; }
+[data-dsh-manqu-pet] .pet-activities { display: none; flex-direction: column; gap: 2px; margin-bottom: 2px; padding-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,.10); }
+[data-dsh-manqu-pet] .pet-activities:not(:empty) { display: flex; }
+[data-dsh-manqu-pet] .pet-act-row { display: flex; align-items: center; gap: 6px; padding: 3px 5px; border-radius: 6px; cursor: pointer; max-width: 100%; }
+[data-dsh-manqu-pet] .pet-act-row:hover { background: rgba(255,255,255,.10); }
+[data-dsh-manqu-pet] .pet-act-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+[data-dsh-manqu-pet] .pet-act-dot.running { background: #5b8cff; box-shadow: 0 0 6px rgba(91,140,255,.8); }
+[data-dsh-manqu-pet] .pet-act-dot.waiting { background: #f5a623; box-shadow: 0 0 6px rgba(245,166,35,.85); }
+[data-dsh-manqu-pet] .pet-act-title { font-size: 11px; line-height: 15px; color: #cfd6e4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-dsh-manqu-pet] .pet-menu button { border: 0; border-radius: 6px; padding: 4px 9px; font-size: 11px; cursor: pointer;
   background: rgba(255,255,255,.14); color: #E8EBF2; font-family: system-ui, sans-serif; white-space: nowrap; }
 [data-dsh-manqu-pet] .pet-menu button:hover { background: rgba(255,255,255,.28); }
@@ -239,13 +248,18 @@ function apply(ctx = {}) {
   const statusTitle = status.querySelector(".tt");
   const menu = document.createElement("div");
   menu.className = "pet-menu";
+  const actList = document.createElement("div");
+  actList.className = "pet-activities";
+  const actionsRow = document.createElement("div");
+  actionsRow.className = "pet-menu-actions";
   const btnWave = document.createElement("button");
   btnWave.textContent = "\u{1F44B} \u6253\u62DB\u547C";
   const btnJump = document.createElement("button");
   btnJump.textContent = "\u{1F998} \u8DF3\u4E00\u4E0B";
   const btnHide = document.createElement("button");
   btnHide.textContent = "\u{1F648} \u9690\u85CF";
-  menu.append(btnWave, btnJump, btnHide);
+  actionsRow.append(btnWave, btnJump, btnHide);
+  menu.append(actList, actionsRow);
   host.append(canvas, hitarea, status, menu);
   const restore = document.createElement("div");
   restore.className = "pet-restore";
@@ -302,6 +316,7 @@ function apply(ctx = {}) {
   let mood = { thinking: false, waiting: false, celebrateUntil: 0, failedUntil: 0, readyUntil: 0, titles: [] };
   let seenReadyUntil = 0;
   let readyUnread = false;
+  let shownBubbleKey = "";
   let refreshTimer = null;
   let refreshBusy = false;
   let eventSource = null;
@@ -332,6 +347,15 @@ function apply(ctx = {}) {
         if (mood.readyUntil > seenReadyUntil) {
           seenReadyUntil = mood.readyUntil;
           readyUnread = true;
+        }
+        renderActivities(Array.isArray(body.activities) ? body.activities : []);
+        const b = body.bubble;
+        if (b !== null && typeof b === "object" && typeof b.until === "number" && b.until > Date.now()) {
+          const key = `${b.kind}:${b.text}:${b.until}`;
+          if (key !== shownBubbleKey) {
+            shownBubbleKey = key;
+            bubble(b.text, 3600);
+          }
         }
         if (m.thinking === true && m.waiting !== true && m.celebrateUntil <= Date.now() && m.failedUntil <= Date.now()) {
           if (mood.titles.length) {
@@ -571,14 +595,34 @@ function apply(ctx = {}) {
   };
   let lastClickAt = 0;
   let clickTimer = null;
-  const bubble = (text) => {
+  const bubble = (text, ms = 1600) => {
     const old = host.querySelector(".pet-bubble");
     if (old) old.remove();
     const b = document.createElement("div");
     b.className = "pet-bubble";
     b.textContent = text;
     host.appendChild(b);
-    setTimeout(() => b.remove(), 1600);
+    setTimeout(() => b.remove(), ms);
+  };
+  const renderActivities = (rows) => {
+    actList.replaceChildren();
+    for (const row of rows.slice(0, 6)) {
+      if (row === null || typeof row !== "object") continue;
+      const item = document.createElement("div");
+      item.className = "pet-act-row";
+      const dot = document.createElement("span");
+      dot.className = `pet-act-dot ${row.state === "waiting" ? "waiting" : "running"}`;
+      const label = document.createElement("span");
+      label.className = "pet-act-title";
+      label.textContent = typeof row.title === "string" && row.title ? row.title : typeof row.sessionId === "string" ? row.sessionId : "\u4EFB\u52A1";
+      item.title = label.textContent;
+      item.append(dot, label);
+      item.addEventListener("click", () => {
+        readyUnread = false;
+        closeMenu();
+      });
+      actList.appendChild(item);
+    }
   };
   btnWave.addEventListener("click", () => {
     closeMenu();

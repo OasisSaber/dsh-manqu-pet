@@ -8,6 +8,7 @@ import { STATE_PATH, ASSETS_PATH, EVENTS_PATH } from './src/routes.mjs'
 import { sanitizeAssetPath, contentTypeFor } from './src/assets.mjs'
 import { parseTurnEvent, parseApprovalEvent } from './src/session-events.mjs'
 import { CELEBRATE_MS, FAILED_MS, READY_MS } from './src/state.mjs'
+import { buildActivities, bubbleFromJob } from './src/activities.mjs'
 
 export const name = 'dsh-manqu-pet'
 export const inject = ['jobs', 'agents', 'sessions', 'webServer']
@@ -26,6 +27,8 @@ export function apply(ctx) {
   let readyUntil = 0 // Ready（完成但有未读活动）：庆祝窗口结束后由 review 行接管，直至 client 单击已读或过期
   const titles = []
   const activeTurns = new Map() // sessionId → 未结束 turn 数
+  const waitingSessions = new Set() // 正在等待批准/输入的会话（托盘橙点）
+  let lastBubble = null // 最近一次任务终态的气泡载荷 {text,kind,until}
   const sseClients = new Set()
 
   const broadcast = () => {
@@ -35,16 +38,17 @@ export function apply(ctx) {
     }
   }
 
-  /** 单快照过滤：已见去重 + running/pending 过滤 + label 提取。 */
+  /** 单快照过滤：已见去重 + running/pending 过滤，保留完整快照。 */
   const pushRunning = (out, seen, snapshot) => {
+    if (snapshot === null || typeof snapshot !== 'object') return
     if (seen.has(snapshot.id)) return
     seen.add(snapshot.id)
     if (snapshot.status === 'running' || snapshot.status === 'pending') {
-      out.push(typeof snapshot.label === 'string' ? snapshot.label : snapshot.id)
+      out.push(snapshot)
     }
   }
 
-  /** 从宿主 jobs 服务收集运行中任务标题（跨 agent + unowned，按 id 去重）。 */
+  /** 从宿主 jobs 服务收集运行中任务快照（跨 agent + unowned，按 id 去重）。 */
   const collectRunningJobs = (ctxRef) => {
     const jobs = ctxRef.jobs
     const seen = new Set()
@@ -74,6 +78,7 @@ export function apply(ctx) {
         } else if (snapshot.status === 'failed') {
           failedUntil = Math.max(failedUntil, now + FAILED_MS)
         }
+        lastBubble = bubbleFromJob(snapshot, now) ?? lastBubble
         broadcast()
       }))
     }
@@ -87,8 +92,8 @@ export function apply(ctx) {
         if (id === null) return
         const approval = parseApprovalEvent(event)
         if (approval !== null) {
-          if (approval.kind === 'asked') waiting = true
-          else waiting = false
+          if (approval.kind === 'asked') { waiting = true; waitingSessions.add(id) }
+          else { waiting = false; waitingSessions.delete(id) }
           broadcast()
           return
         }
@@ -97,6 +102,7 @@ export function apply(ctx) {
         if (parsed.kind === 'start') {
           activeTurns.set(id, (activeTurns.get(id) ?? 0) + 1)
           waiting = false
+          waitingSessions.delete(id)
         } else {
           const n = (activeTurns.get(id) ?? 0) - 1
           if (n <= 0) activeTurns.delete(id)
@@ -104,8 +110,10 @@ export function apply(ctx) {
           if (parsed.blocked) {
             // 阻塞（等待批准/权限）：进入 waiting，不庆祝。
             waiting = true
+            waitingSessions.add(id)
           } else {
             waiting = false
+            waitingSessions.delete(id)
             celebrateUntil = Math.max(celebrateUntil, Date.now() + CELEBRATE_MS)
             readyUntil = Math.max(readyUntil, Date.now() + READY_MS)
           }
@@ -134,14 +142,17 @@ export function apply(ctx) {
             for (const n of activeTurns.values()) {
               if (n > 0) { anyTurns = true; break }
             }
-            const jobTitles = collectRunningJobs(ctx)
-            thinking = anyTurns || jobTitles.length > 0
+            const activeJobs = collectRunningJobs(ctx)
+            thinking = anyTurns || activeJobs.length > 0
             titles.length = 0
-            for (const t of jobTitles) titles.push(t)
+            for (const job of activeJobs) {
+              titles.push(typeof job.label === 'string' ? job.label : job.id)
+            }
+            let sessionList = []
             if (sessionsSvc !== undefined && typeof sessionsSvc.list === 'function') {
               try {
-                for (const s of sessionsSvc.list()) {
-                  if (s === null || typeof s !== 'object') continue
+                sessionList = sessionsSvc.list().filter((s) => s !== null && typeof s === 'object')
+                for (const s of sessionList) {
                   if ((activeTurns.get(s.id) ?? 0) > 0 && typeof s.displayTitle === 'string') {
                     titles.push(s.displayTitle)
                   }
@@ -150,6 +161,12 @@ export function apply(ctx) {
                 // 会话列表异常：保留已有标题
               }
             }
+            const activities = buildActivities({
+              jobs: activeJobs,
+              sessions: sessionList,
+              activeTurns,
+              waitingSessions,
+            })
             json(res, 200, {
               mood: {
                 thinking,
@@ -159,6 +176,8 @@ export function apply(ctx) {
                 readyUntil,
                 titles: titles.slice(0, 4),
               },
+              activities,
+              bubble: lastBubble,
               ts: Date.now(),
             }, { 'cache-control': 'no-store' })
           } catch (error) {
